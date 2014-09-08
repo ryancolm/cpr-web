@@ -1,0 +1,95 @@
+// cpr-web
+import java.text.SimpleDateFormat
+
+apply plugin: 'java'
+apply plugin: 'eclipse'
+apply plugin: 'idea'
+apply plugin: 'ear'
+apply plugin: 'war'
+apply plugin: 'jetty'
+
+apply from: "dependencies.gradle"
+
+sourceCompatibility = 1.5
+targetCompatibility = 1.5
+
+group = 'ie.cpr'
+version = '1.0'
+
+ext {
+    earFileName = "cpr"
+    deploymentDescriptorDescription = "CPR Web App"
+}
+
+repositories {
+    maven {
+        url 'http://wdbah2w23866:8281/nexus/content/groups/public'
+    }    
+}
+
+configurations {
+    provided
+}
+
+dependencies {
+    compile libs.spring
+    compile libs.jackson
+    compile libs.jaxb
+    compile libs.logging
+    compile libs.jsp
+    compile libs.json
+    
+    
+
+    compile group: 'org.apache.commons', name: 'commons-collections4', version: '4.0'
+    compile group: 'joda-time', name: 'joda-time', version: '2.3'
+
+    testCompile group: 'junit', name: 'junit', version: '4.11'
+
+    provided group: 'javax.servlet', name: 'servlet-api', version: '2.4'
+}
+
+sourceSets {
+    main {
+        compileClasspath += configurations.provided
+    }
+}
+
+task versionProperties << {
+    def versionProperties = new File("$projectDir/src/main/resources/version.properties")
+    versionProperties.withWriter{ out ->
+        out.writeLine("#Build version info")
+        out.writeLine("application.version=${version}")
+        out.writeLine("application.buildDate=" + new SimpleDateFormat("yyyy/MM/dd HH\\:mm").format(new Date()))
+    }
+}
+war.dependsOn versionProperties
+
+ear {
+    archiveName = "${earFileName}_v${version}.ear"
+    entryCompression = ZipEntryCompression.STORED
+    exclude '**/*.class', '*.sql', '**/*.properties'
+    includeEmptyDirs = false
+    from "$buildDir/libs/${rootProject.name}-${version}.war"
+    deploymentDescriptor {
+        applicationName = "${rootProject.name}-${version}"
+        displayName = "${rootProject.name}"
+        description = "${deploymentDescriptorDescription}"
+    }
+}
+ear.dependsOn war
+
+task deployToOc4j(type: JavaExec) {
+    main = "oracle.oc4j.admin.deploy.cmdline.Oc4jAdminCmdline"
+    args = [
+            "deployer:oc4j:$oc4jdeploymenturl",
+            "$oc4juser",
+            "$oc4jpassword",
+            "-deploy",
+            "-file",
+            "$buildDir/libs/${earFileName}_v${version}.ear",
+            "-deploymentName", "${earFileName}_v${version}",
+            "-contextRoot", "/cpr", "-bindAllWebApps"]
+    classpath = files("$oc4jhome/j2ee/home/admin_client.jar")
+}
+
